@@ -1,0 +1,18 @@
+[project]
+name = "cropcal-ml"
+version = "0.1.0"
+description = "Dataset pipeline and eval harness for CropCal event extraction"
+requires-python = ">=3.11"
+dependencies = [
+    "pillow>=12.3.0",
+    "playwright>=1.62.0",
+]
+
+[dependency-groups]
+train = [
+    "accelerate>=1.15.0",
+    "peft>=0.20.0",
+    "torch>=2.14.0",
+    "torchvision>=0.29.0",
+    "transformers>=5.17.0",
+]

@@ -1,0 +1,36 @@
+name = "cropcal-proxy"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+GEMINI_MODEL = "gemini-3.8-flash"
+# Default crops/day per invite code; a code's own `limit` (invite.sh) overrides it.
+DAILY_LIMIT = "60"
+# Crops/day across ALL codes (~$2.50/day at Flash list price). Soft: counted in KV.
+GLOBAL_DAILY_LIMIT = "500"
+# Kill switch: set to "1" and redeploy (or set it in the dashboard) to pause the
+# service; every request then returns 503.
+DISABLED = "0"
+
+# Created by scripts/setup.sh (wrangler kv namespace create TOKENS). Holds invite
+# tokens and the per-day usage counters.
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "fa47b3df2fff4271911c73abba01336f"
+
+# Burst limits via Cloudflare's rate-limiting binding. Counters are per
+# Cloudflare location and approximate; they shave bursts, the KV quotas above
+# are the real cap. period must be 10 or 60 seconds.
+[[ratelimits]]
+name = "RL_IP"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+[[ratelimits]]
+name = "RL_TOKEN"
+namespace_id = "1002"
+  [ratelimits.simple]
+  limit = 10
+  period = 60

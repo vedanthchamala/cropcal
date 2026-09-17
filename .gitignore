@@ -1,0 +1,13 @@
+node_modules/
+.DS_Store
+*.log
+.env
+ml/data/
+ml/checkpoints/
+ml/results/
+ml/.venv/
+__pycache__/
+dist/
+proxy/.dev.vars
+.wrangler/
+ml/report.html
