@@ -38,27 +38,38 @@ export function validateBody(body) {
   return null;
 }
 
-// KV is eventually consistent, so this is a soft limit — fine for invite-only testing.
-export async function readQuota(kv, token, limit, now = new Date()) {
-  const key = `use:${token}:${todayKey(now)}`;
-  const used = Number((await kv.get(key)) || 0);
-  return { key, used, limit, allowed: used < limit };
-}
+// ---- Quota logic (pure). The QuotaCounter Durable Object runs these between a
+// synchronous storage read and write, so one invite code's check-and-increment
+// can never interleave with another request for the same code — unlike a KV
+// read-then-write, which a parallel burst outruns.
 
-// KV allows ~1 write/s per key; under a burst the increment can be refused.
-// Losing a count is preferable to failing a crop the user already paid for in
-// latency, so the limit stays soft.
-export async function bumpQuota(kv, key, used) {
-  try {
-    await kv.put(key, String(used + 1), { expirationTtl: 2 * 24 * 3600 });
-  } catch {
-    // soft limit
+export const BURST_WINDOW_MS = 60_000;
+export const GLOBAL_NAME = "global"; // real codes start with "cc_", so no collision
+
+// state = { day, used, recent: [ms timestamps of reservations in the window] }.
+// burst = max reservations per BURST_WINDOW_MS (0 disables the burst check).
+export function reserveIn(state, { day, limit, burst = 0, now }) {
+  const prev = state || {};
+  const used = prev.day === day ? prev.used || 0 : 0;
+  const recent = burst > 0 ? (prev.recent || []).filter((t) => now - t < BURST_WINDOW_MS) : [];
+  if (burst > 0 && recent.length >= burst) {
+    return { ok: false, reason: "burst", used, state: { day, used, recent } };
   }
+  if (used >= limit) return { ok: false, reason: "daily", used, state: { day, used, recent } };
+  if (burst > 0) recent.push(now);
+  return { ok: true, used: used + 1, state: { day, used: used + 1, recent } };
 }
 
-// The service-wide daily counter shares the per-code key scheme; real codes
-// always start with "cc_", so "global" can never collide with one.
-export const GLOBAL_TOKEN = "global";
+// Refund for a reservation whose model call failed. The burst timestamp stays:
+// retries against a failing upstream still count toward the per-minute limit.
+export function releaseIn(state, day) {
+  if (!state || state.day !== day || !(state.used > 0)) return state || null;
+  return { ...state, used: state.used - 1 };
+}
+
+export function usedIn(state, day) {
+  return state && state.day === day ? state.used || 0 : 0;
+}
 
 export const MAX_REQUEST_BYTES = 13_000_000; // two ≤6 MB base64 images + context, with slack
 
@@ -82,9 +93,9 @@ export function corsHeaders(origin) {
   };
 }
 
-// Wrapper over Cloudflare's rate-limiting binding. Allows when the binding is
-// absent (older local dev) or errors — the invite code and daily quotas still
-// gate the request; this only shaves bursts.
+// Wrapper over Cloudflare's rate-limiting binding (per IP, before any lookup).
+// Measured weak in production (approximate, per location), so it only trims
+// noise; the Durable Object is the real limit. Allows when absent or erroring.
 export async function rateLimitOk(limiter, key) {
   if (!limiter || !key) return true;
   try {

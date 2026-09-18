@@ -37,7 +37,7 @@ What makes it accurate:
 
 Works with an invite code (crops go through the CropCal service to Google's
 Gemini API on a paid plan, nothing stored) or with your own Anthropic API key.
-No account, no analytics. Full policy: <PRIVACY URL>.
+No account, no analytics. Full policy: https://github.com/vedanthchamala/cropcal/blob/main/PRIVACY.md
 
 Keyboard shortcut: Alt+Shift+C (Option+Shift+C on Mac).
 
@@ -48,23 +48,48 @@ Keyboard shortcut: Alt+Shift+C (Option+Shift+C on Mac).
   - `activeTab`: capture a screenshot of the current tab, only when the user clicks the action or presses the shortcut.
   - `scripting`: inject the drag-to-select overlay into the current tab on that click.
   - `storage`: persist the user's API key and model settings locally.
-  - Host `https://*.workers.dev/*`: send the selected region to the CropCal service (Cloudflare Worker) which forwards it to the Gemini API; the default path.
-  - Host `https://api.anthropic.com/*`: send the selected region to the Anthropic API with the user's own key (optional path).
+  - Host `https://cropcal-proxy.vedhuchamala.workers.dev/*`: send the selected region to the CropCal service (a Cloudflare Worker we run) which forwards it to the Gemini API; the default path.
+  - Optional host `https://*.workers.dev/*`: requested at runtime only if the user enters a different service URL in options (self-hosted proxy).
+  - Host `https://api.anthropic.com/*`: send the selected region to the Anthropic API with the user's own key (optional path chosen in options).
   - Optional host `http://127.0.0.1:48765/*`, `http://localhost:48765/*`: developer-only option to route through a local server; requested at runtime only if the user selects it.
 - **Remote code:** No, I am not using remote code.
 - **Data usage:** collects "Website content" (the screenshot of the selected region and page, sent to the CropCal service / the user's chosen AI provider) and "Authentication information" (invite code or the user's own API key, stored locally). Not sold, not used for unrelated purposes, not used for creditworthiness.
-- **Privacy policy URL:** link to PRIVACY.md on GitHub (raw or rendered).
+- **Privacy policy URL:** https://github.com/vedanthchamala/cropcal/blob/main/PRIVACY.md
 
 ## Assets
 
 - Icon 128×128: `extension/icons/icon128.png` (done).
-- Screenshots (required, 1–5): 1280×800 or 640×400 PNG/JPEG, no transparency.
-  Suggested set:
-  1. Overlay mid-drag over an Instagram flyer.
-  2. The resulting prefilled Google Calendar event.
-  3. A GroupMe message with "this Friday 7pm" → calendar with the resolved date.
-  4. Options page.
-- Small promo tile 440×280 (optional but improves discoverability).
+- Screenshots (1280×800 PNG, done — rendered from the project's synthetic pages
+  with the real overlay/toast CSS; all content fictional):
+  1. `store/screenshots/1-drag-select-flyer.png` — overlay mid-drag on a flyer.
+  2. `store/screenshots/2-chat-relative-date-toast.png` — chat with "this
+     sunday 6:00-8:00pm" and the success toast.
+  3. `store/screenshots/3-options.png` — options page, connected.
+  4. Optional, add by hand: the prefilled Google Calendar event page from a real
+     crop (it shows your Google account, so crop or blur the avatar).
+- Small promo tile 440×280: `store/screenshots/promo-440x280.png` (done).
+- Homepage URL: https://github.com/vedanthchamala/cropcal
+- Support URL: https://github.com/vedanthchamala/cropcal/issues
+
+## Submit (click-by-click, ~15 min + review time)
+
+1. https://chrome.google.com/webstore/devconsole → sign in with the Google
+   account that should own the listing → accept the developer agreement → pay
+   the one-time $5 registration fee.
+2. **Items → New item** → upload `dist/cropcal-0.1.1.zip`.
+3. **Store listing tab:** paste the name, summary, description and category
+   from above; upload the three screenshots and the promo tile; set the
+   homepage and support URLs.
+4. **Privacy tab:** single purpose + the permission justifications above;
+   "Remote code: No"; data usage = Website content + Authentication
+   information, with the three "not sold / not for unrelated purposes / not for
+   creditworthiness" certifications; privacy policy URL above.
+5. **Distribution tab:** Visibility **Unlisted**; all regions; free.
+6. **Submit for review.** Typical wait 1–3 business days; the dashboard emails
+   the result. If rejected, the reason is almost always a permission
+   justification — reply with the wording above.
+7. After approval, share the store link with invite-code holders; installs
+   auto-update on every future upload (each needs a higher `version`).
 
 ## Distribution alternatives
 

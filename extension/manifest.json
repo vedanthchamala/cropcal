@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CropCal — Screenshot to Calendar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Drag-select any event on your screen — a flyer, chat, syllabus, or email — and send it straight to Google Calendar.",
   "icons": {
     "16": "icons/icon16.png",
@@ -9,9 +9,17 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["https://*.workers.dev/*", "https://api.anthropic.com/*"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://cropcal-proxy.vedhuchamala.workers.dev/*",
+    "https://api.anthropic.com/*"
+  ],
   "optional_host_permissions": [
+    "https://*.workers.dev/*",
     "http://127.0.0.1:48765/*",
     "http://localhost:48765/*"
   ],

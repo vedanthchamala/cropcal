@@ -1,15 +1,20 @@
 // CropCal hosted proxy: the extension's /extract contract in front of Gemini.
-// Auth = invite token (KV), quota = per-token crops/day + a service-wide
-// crops/day (KV), bursts = per-IP and per-token rate limits, model request =
-// byte-for-byte what extension-gemini builds. Images are never stored or logged.
+// Auth = invite token (KV). Limits = a Durable Object per invite code (atomic
+// crops/day + crops/minute) and one service-wide (crops/day), reserved BEFORE
+// the model call and refunded if it fails. Model request = byte-for-byte what
+// extension-gemini builds. Images are never stored or logged.
 import { buildRequest, parseResponse } from "../../extension-gemini/lib/providers/gemini.js";
 import {
-  GLOBAL_TOKEN, bearer, bumpQuota, corsHeaders, geminiErrorMessage, isTokenShaped,
-  rateLimitOk, readQuota, requestTooLarge, sanitizeContext, validateBody
+  GLOBAL_NAME, bearer, corsHeaders, geminiErrorMessage, isTokenShaped, rateLimitOk,
+  requestTooLarge, sanitizeContext, todayKey, validateBody
 } from "./lib.js";
+
+export { QuotaCounter } from "./quota.js";
 
 const json = (obj, status, cors) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", ...cors } });
+
+const counter = (env, name) => env.QUOTA.get(env.QUOTA.idFromName(name));
 
 async function callGemini(req, attempts = 3) {
   let res;
@@ -21,8 +26,8 @@ async function callGemini(req, attempts = 3) {
   return res;
 }
 
-// Every gate a request must pass before it can cost anything, cheapest first:
-// IP burst limit → token shape → token lookup → token burst limit → daily quotas.
+// Cheapest checks first; an unknown code never reaches a Durable Object, so
+// guessing codes cannot create objects or touch the counters.
 async function authorize(request, env, cors) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   if (!(await rateLimitOk(env.RL_IP, ip))) {
@@ -33,13 +38,44 @@ async function authorize(request, env, cors) {
   if (!isTokenShaped(token)) return { error: json({ error: "Invite code not recognized" }, 403, cors) };
   const rec = await env.TOKENS.get(`token:${token}`, "json");
   if (!rec || rec.disabled) return { error: json({ error: "Invite code not recognized" }, 403, cors) };
-  if (!(await rateLimitOk(env.RL_TOKEN, token))) {
-    return { error: json({ error: "Too many requests for this invite code — slow down" }, 429, cors) };
+  return { token, rec, limit: Number(rec.limit || env.DAILY_LIMIT || 60) };
+}
+
+// Reserves one crop on the code's counter, then on the service-wide one. Any
+// counter failure refuses the request: a limit that fails open is not a limit.
+async function reserve(env, a, day, cors) {
+  const mine = counter(env, `code:${a.token}`);
+  const all = counter(env, GLOBAL_NAME);
+  let r;
+  try {
+    r = await mine.reserve({ day, limit: a.limit, burst: Number(env.BURST_PER_MIN || 10) });
+  } catch {
+    return { error: json({ error: "The CropCal service is busy — try again in a minute" }, 503, cors) };
   }
-  const limit = Number(rec.limit || env.DAILY_LIMIT || 60);
-  const quota = await readQuota(env.TOKENS, token, limit);
-  const global = await readQuota(env.TOKENS, GLOBAL_TOKEN, Number(env.GLOBAL_DAILY_LIMIT || 500));
-  return { token, rec, quota, global };
+  if (!r.ok) {
+    const error =
+      r.reason === "burst"
+        ? "Too many crops in a minute for this invite code — slow down"
+        : `Daily limit reached (${a.limit} crops/day) — resets at midnight UTC`;
+    return { error: json({ error }, 429, cors) };
+  }
+  let g;
+  try {
+    g = await all.reserve({ day, limit: Number(env.GLOBAL_DAILY_LIMIT || 500), burst: 0 });
+  } catch {
+    g = null;
+  }
+  if (!g || !g.ok) {
+    await mine.release(day).catch(() => {});
+    return g
+      ? { error: json({ error: "The CropCal service has reached its daily limit — try again tomorrow" }, 429, cors) }
+      : { error: json({ error: "The CropCal service is busy — try again in a minute" }, 503, cors) };
+  }
+  const refund = async () => {
+    await mine.release(day).catch(() => {});
+    await all.release(day).catch(() => {});
+  };
+  return { used: r.used, refund };
 }
 
 export default {
@@ -55,23 +91,19 @@ export default {
     if (url.pathname === "/me" && request.method === "GET") {
       const a = await authorize(request, env, cors);
       if (a.error) return a.error;
-      return json(
-        { ok: true, name: a.rec.name, used: a.quota.used, limit: a.quota.limit, model: env.GEMINI_MODEL },
-        200,
-        cors
-      );
+      let used = 0;
+      try {
+        used = await counter(env, `code:${a.token}`).used(todayKey());
+      } catch {
+        return json({ error: "The CropCal service is busy — try again in a minute" }, 503, cors);
+      }
+      return json({ ok: true, name: a.rec.name, used, limit: a.limit, model: env.GEMINI_MODEL }, 200, cors);
     }
 
     if (url.pathname === "/extract" && request.method === "POST") {
       if (requestTooLarge(request)) return json({ error: "Request too large" }, 413, cors);
       const a = await authorize(request, env, cors);
       if (a.error) return a.error;
-      if (!a.quota.allowed) {
-        return json({ error: `Daily limit reached (${a.quota.limit} crops/day) — resets at midnight UTC` }, 429, cors);
-      }
-      if (!a.global.allowed) {
-        return json({ error: "The CropCal service has reached its daily limit — try again tomorrow" }, 429, cors);
-      }
       let body;
       try {
         body = await request.json();
@@ -81,33 +113,37 @@ export default {
       const problem = validateBody(body);
       if (problem) return json({ error: problem }, 400, cors);
 
-      const req = buildRequest({ crop: body.image, screen: body.screen }, sanitizeContext(body.context), {
-        apiKey: env.GEMINI_API_KEY,
-        model: env.GEMINI_MODEL,
-        thinking: env.GEMINI_THINKING || ""
-      });
-      const res = await callGemini(req);
-      if (!res.ok) {
-        const detail = await res.json().catch(() => null);
-        const { status, error } = geminiErrorMessage(res.status, detail);
-        return json({ error }, status, cors);
-      }
+      const day = todayKey();
+      const slot = await reserve(env, a, day, cors);
+      if (slot.error) return slot.error;
+
       let parsed;
       try {
+        const req = buildRequest({ crop: body.image, screen: body.screen }, sanitizeContext(body.context), {
+          apiKey: env.GEMINI_API_KEY,
+          model: env.GEMINI_MODEL,
+          thinking: env.GEMINI_THINKING || ""
+        });
+        const res = await callGemini(req);
+        if (!res.ok) {
+          const detail = await res.json().catch(() => null);
+          const { status, error } = geminiErrorMessage(res.status, detail);
+          await slot.refund();
+          return json({ error }, status, cors);
+        }
         parsed = parseResponse(await res.json());
       } catch (err) {
-        return json({ error: err.message }, 502, cors);
+        await slot.refund();
+        return json({ error: err.message || "Model call failed" }, 502, cors);
       }
-      await bumpQuota(env.TOKENS, a.quota.key, a.quota.used);
-      await bumpQuota(env.TOKENS, a.global.key, a.global.used);
       return json(
         {
           events: parsed.events,
           meta: {
             provider: "hosted",
             model: parsed.model || env.GEMINI_MODEL,
-            used: a.quota.used + 1,
-            limit: a.quota.limit,
+            used: slot.used,
+            limit: a.limit,
             tokens: parsed.usage
               ? { prompt: parsed.usage.promptTokenCount, output: parsed.usage.candidatesTokenCount, thoughts: parsed.usage.thoughtsTokenCount }
               : null

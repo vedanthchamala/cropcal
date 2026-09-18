@@ -24,8 +24,8 @@ When you drag-select a region, CropCal:
      Cloudflare Workers that forwards the request to Google's Gemini API on a
      paid plan (Google states paid-tier API data is not used to improve its
      products). The service keeps only per-code and service-wide counts of crops per
-     day, plus short-lived rate-limit counters keyed by invite code and IP
-     address; it never stores or logs the images, the page title, or the URL.
+     day, the times of each code's last few crops (for the per-minute
+     limit), and Cloudflare's short-lived per-IP rate-limit counter; it never stores or logs the images, the page title, or the URL.
    - **Anthropic API** (`api.anthropic.com`), using the API key you entered.
      Anthropic's handling of that data is governed by
      [Anthropic's privacy policy](https://www.anthropic.com/privacy) and their
@@ -53,7 +53,8 @@ When you drag-select a region, CropCal:
 | `activeTab` | Capture the tab you clicked the button on, only at that moment. |
 | `scripting` | Inject the drag-select overlay into that tab. |
 | `storage` | Save your settings locally. |
-| `https://*.workers.dev/*` | Reach the CropCal service (Cloudflare Workers). |
+| `https://cropcal-proxy.vedhuchamala.workers.dev/*` | Reach the CropCal service (Cloudflare Workers). |
+| `https://*.workers.dev/*` (optional, off by default) | Only requested if you enter a different service URL in options. |
 | `https://api.anthropic.com/*` | Call the Anthropic API with your key, if you choose that option. |
 | `http://127.0.0.1:48765/*` (optional, off by default) | Only requested if you choose the developer bridge option. |
 

@@ -63,10 +63,11 @@ live only in your browser.
 `proxy/` is a Cloudflare Worker that speaks the same `/extract` contract as
 the bridge: it checks an invite code, enforces a per-code daily limit, sends
 the crop to Gemini with the request `extension-gemini/` builds, and returns
-the events. It stores nothing but counters. Limits: each code has its own
-crops/day, the service has a crops/day cap across all codes
-(`GLOBAL_DAILY_LIMIT` in `proxy/wrangler.toml`), and bursts are rate-limited
-per IP and per code; `DISABLED = "1"` pauses the service. Deploy once with
+the events. It stores nothing but counters. Limits are hard caps held in a
+Durable Object per invite code (crops/day and crops/minute) plus one for the
+whole service (`GLOBAL_DAILY_LIMIT` in `proxy/wrangler.toml`); a crop is
+reserved before the model call and refunded if it fails. `DISABLED = "1"`
+pauses the service. Deploy once with
 `pnpm exec wrangler login` then `./proxy/scripts/setup.sh`; mint codes with
 `./proxy/scripts/invite.sh <name> [crops_per_day]`. Local run:
 `cd proxy && ../node_modules/.bin/wrangler dev --local`.

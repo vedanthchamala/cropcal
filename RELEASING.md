@@ -12,8 +12,10 @@ The Gemini key must belong to a project with billing enabled (paid tier: no
 `extension/lib/providers/hosted.js` (DEFAULT_PROXY_URL) before packaging.
 
 Limits live in `proxy/wrangler.toml`: `DAILY_LIMIT` (default per code),
-`GLOBAL_DAILY_LIMIT` (all codes), per-IP / per-code burst limits, and the
-`DISABLED` kill switch. Redeploy after changing them
+`BURST_PER_MIN` (per code), `GLOBAL_DAILY_LIMIT` (all codes) — enforced
+atomically by the `QuotaCounter` Durable Object — plus the `DISABLED` kill
+switch. Keep a per-day request quota on the Gemini API in Google Cloud as the
+backstop. Redeploy after changing them
 (`pnpm exec wrangler deploy --config proxy/wrangler.toml`). Revoke a code with
 `pnpm exec wrangler kv key delete --binding TOKENS "token:<code>" --remote`
 from `proxy/`.
@@ -40,6 +42,7 @@ Share the release URL. Testers follow README → Install.
    privacy tab, permission justifications, privacy policy URL pointing at
    PRIVACY.md on GitHub).
 4. Visibility: **Unlisted**. Submit for review (typically 1–3 business days).
+   Full click-by-click in `store/listing.md` → Submit.
 5. After approval, share the store link; installs auto-update on future uploads.
 
 Each Web Store upload must have a higher `version` than the last.

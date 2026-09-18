@@ -1,6 +1,128 @@
 # Status
 
-_Updated 2026-09-16_
+_Updated 2026-09-17_
+
+## Web Store submission package ready (2026-09-17 evening)
+- **v0.1.1:** `host_permissions` narrowed from `https://*.workers.dev/*` to
+  the exact proxy host; `https://*.workers.dev/*` moved to
+  `optional_host_permissions` and requested from the options page (Save /
+  Test) only when a custom Service URL is entered — same mechanism as the
+  bridge's localhost permission (`ensureHostPermission` in options.js).
+  Version bumped in manifest + package.json; `dist/cropcal-0.1.1.zip` built
+  with tests green (41). PRIVACY.md permission table and the listing's
+  justifications updated to match.
+- **Assets:** three 1280×800 screenshots + a 440×280 promo tile in
+  `store/screenshots/`, rendered with Playwright from the synthetic generator's
+  pages (fictional orgs/people) with the real `overlay.css`; the options page
+  screenshot is the real page served over localhost with `chrome.*` stubbed.
+  Visually checked. A real Google Calendar screenshot is optional and manual.
+- **Listing:** `store/listing.md` now has the privacy-policy URL
+  (`github.com/vedanthchamala/cropcal/blob/main/PRIVACY.md`), homepage/support
+  URLs, asset paths, and a click-by-click Submit section.
+- **User steps remaining:** commit + push, `gh release create v0.1.1
+  dist/cropcal-0.1.1.zip`, pay the $5 fee, upload the zip, fill the tabs from
+  the listing, submit as Unlisted.
+- Note on the 600/day Gemini cap below: the 2026-09-16 suite run was 148
+  requests, not 126 (eval_v1 added 22); two full suites ≈ 300 = half the day.
+
+## Google-side hard ceiling: key restricted, 600 requests/day (2026-09-17)
+- The Gemini key lives in GCP project `gen-lang-client-0432191657` (display
+  name "Calendar Extension", created by AI Studio 2026-09-10), **not** "My
+  First Project". The console picker defaults to `vedhuchamala-org` and hides
+  it — link with `?project=gen-lang-client-0432191657`.
+- **Key restriction: already in place.** It is an AI Studio service-account-
+  bound key; the Credentials page shows Restrictions = "Gemini API"
+  (= `generativelanguage.googleapis.com`). Probe with the key: Translate and
+  YouTube both → 401 `CREDENTIALS_MISSING` ("API keys are not supported by
+  this API"), so it is unusable outside Gemini.
+- **Daily cap:** the project is on paid tier 1 (only the tier-1 rows show
+  usage). Row "Request limit per model per day for a project", model
+  `gemini-3.8-flash`, 10,000 → **600**, set by the user in the console.
+  **User-reported, not independently verified** — browser automation could
+  not read the quota table (two attempts). Check: that row reads 600. Resets
+  midnight Pacific; over the cap Gemini answers 429.
+- Left alone on purpose: the tier-1 per-minute row stays 1,000 (it limits
+  rate, not spend; the Worker's burst limit is the control there). Tier 2/3
+  per-day rows untouched — they bind only after a tier promotion (tier 2 ≈
+  $250 cumulative spend); cap the tier-2 row if that ever gets close.
+- **Decision: evals share this project for now.** Quota is per project, not
+  per key, so harness runs from `ml/.env` draw on the same 600/day: one full
+  suite = 126 requests (~21%); the five back-to-back suites of 2026-09-16
+  (~630) would now exhaust the day and 429 real users. Keep to ≤2 full
+  suites/day (or `--only`); move evals to a second AI Studio project once
+  there are real testers.
+
+## Hard limits: Durable Object counters replace the KV quotas (2026-09-17, deployed + verified live)
+- Fixes the race found below. `proxy/src/quota.js` = `QuotaCounter`, a
+  SQLite-backed Durable Object (the only kind on the free plan) using the
+  synchronous `ctx.storage.kv` API: read → decide → write with no intervening
+  I/O, which the runtime makes atomic per object. One object per invite code
+  (`code:<token>`: crops/day + `BURST_PER_MIN` crops/minute) and one named
+  `global` (`GLOBAL_DAILY_LIMIT`). The decision logic is pure
+  (`reserveIn` / `releaseIn` / `usedIn` in `lib.js`) and unit-tested.
+- Flow: size check → per-IP limiter → token shape → KV token lookup → body
+  validation → **reserve on the code, then on the service** → Gemini →
+  **refund both if the model call fails**. Unknown codes never reach a
+  Durable Object. A counter error refuses the request (503): a limit that
+  fails open is not a limit. `RL_TOKEN` and the KV `use:*` counters are gone;
+  `RL_IP` stays as noise reduction only.
+- **Verified under `wrangler dev --local`:** 12 parallel extracts on a
+  limit-3 code → exactly 3 × 200 (`used` 1, 2, 3) and 9 × 429, `/me` = 3/3;
+  with `BURST_PER_MIN=2` and a bogus model, 6 parallel → 4 × 429 burst,
+  2 × 502, `/me` = 0 (both refunded). `wrangler deploy --dry-run` lists
+  `QUOTA`, `TOKENS`, `RL_IP` and the vars. 41 JS tests green.
+- **Deployed by the user 2026-09-17T18:05Z** (migration `v1`);
+  `wrangler versions view` lists `QUOTA (QuotaCounter)`, `TOKENS`, `RL_IP`,
+  `BURST_PER_MIN`, `GLOBAL_DAILY_LIMIT`, `DISABLED`. **Production race test:**
+  throwaway code `zz-race-test` (limit 2), 10 parallel `/extract` →
+  **exactly 2 × 200 (`used` 1, 2), 8 × 429**, a further sequential call → 429,
+  `/me` = 2/2; the code was then deleted and returned 403 within ~4 s. A real
+  eval_v1 crop on the author's code → 8/8 in 3.6 s, `used` 0 → 1. Web origin
+  still gets no ACAO; bad code → 403. `extension/` is byte-identical to the
+  v0.1.0 release commit, so the published zip is current (all changes were
+  server-side).
+- User reports a per-day request quota and an API restriction set on the
+  Gemini key in Google Cloud. Not verifiable from the session: probing
+  Translate and YouTube with the key returned `CREDENTIALS_MISSING` (the key
+  is not usable there), which is consistent with a restriction but does not
+  prove the setting; the quota value cannot be read without `gcloud`.
+- Uncommitted at write time: the Durable Object change set (8 modified files +
+  `proxy/src/quota.js`).
+
+## Public: repo, v0.1.0 tester release, hardened proxy live (2026-09-17)
+- First commit `1a1d1b4`, repo **public** at
+  `github.com/vedanthchamala/cropcal`, release `v0.1.0` with
+  `cropcal-0.1.0.zip` (33,619 bytes). Verified anonymously: the zip downloads
+  (HTTP 200) and `PRIVACY.md` is readable at the raw URL — that is the privacy
+  policy URL the Web Store listing needs.
+- Hardened Worker deployed 2026-09-17T02:26Z; `wrangler versions view` shows
+  `TOKENS`, `RL_IP` (30/60 s), `RL_TOKEN` (10/60 s), `GLOBAL_DAILY_LIMIT`,
+  `DISABLED`. **Verified live:** web origin gets no
+  `Access-Control-Allow-Origin`, extension origin is reflected; 13.5 MB body →
+  413; bad code → 403; real eval_v0 crop (LDOS deadline) → 8/8 in 6.6 s;
+  per-code counter 3 → 4 and `use:global:<day>` = 1. The author's code showed
+  2 crops that did not come from this session, i.e. the extension was used
+  against the live service.
+- **Finding — the burst limiter is weak in production.** Locally it tripped
+  after 8–10 calls; live, 45 sequential `/me` calls in 4 s all passed and a
+  further 25 over ~15 s drew only 2 × 429 (70 calls, 2 rejections, nominal
+  limit 10/min). Cloudflare documents the binding as "permissive, eventually
+  consistent … not an accurate accounting system", per location. Treat it as
+  noise reduction, not a control.
+- **Consequence — the daily quotas can be outrun by a parallel burst.** The
+  check is read-then-write on KV (eventually consistent, ~1 write/s per key,
+  refused writes swallowed), so N concurrent requests on one leaked code all
+  read the same `used` and all reach Gemini. Bounded only by the Workers free
+  plan's 100k requests/day. **The hard ceiling must therefore live at Google:
+  a per-day request quota on the Generative Language API + the key restricted
+  to that API (user action, Cloud console).** Proposed code fix, not built (new
+  abstraction → needs approval): a Durable Object per code doing an atomic
+  check-and-increment (SQLite-backed DOs are on the free plan), replacing the
+  KV counters; KV stays for the token records.
+- Still open before the Web Store: 1–5 screenshots at 1280×800, the $5
+  developer fee, and narrowing `https://*.workers.dev/*` to the exact proxy
+  host (reviewers scrutinize wildcard hosts; the custom "Service URL" field
+  would then need an optional-permission request like the bridge has).
 
 ## Hosted proxy deployed and verified live (2026-09-16 evening)
 - `pnpm exec wrangler login` done (account `vedhuchamala@gmail.com`),

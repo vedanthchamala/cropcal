@@ -21,14 +21,15 @@ function bridgeUrl() {
   return $("bridgeUrl").value.trim() || bridgeProvider.DEFAULT_BRIDGE_URL;
 }
 
-// The bridge lives on localhost, which is an optional host permission so the
-// public install prompt never mentions it. Must be called from a user gesture.
-async function ensureBridgePermission(url) {
+// Only the default service host and api.anthropic.com are required
+// permissions; localhost (bridge) and other workers.dev hosts (a custom service
+// URL) are optional and requested here, from a user gesture, when chosen.
+async function ensureHostPermission(url, what) {
   let origin;
   try {
     origin = `${new URL(url).origin}/*`;
   } catch {
-    throw new Error("Bridge URL is not a valid URL");
+    throw new Error(`${what} URL is not a valid URL`);
   }
   const perm = { origins: [origin] };
   if (await chrome.permissions.contains(perm)) return;
@@ -36,11 +37,15 @@ async function ensureBridgePermission(url) {
   try {
     granted = await chrome.permissions.request(perm);
   } catch (err) {
-    throw new Error(
-      `Cannot request access to ${origin} — only the default bridge port is allowed (${err.message})`
-    );
+    throw new Error(`Cannot request access to ${origin} (${err.message})`);
   }
-  if (!granted) throw new Error("Permission to reach the bridge was declined");
+  if (!granted) throw new Error(`Permission to reach the ${what.toLowerCase()} was declined`);
+}
+
+const ensureBridgePermission = (url) => ensureHostPermission(url, "Bridge");
+
+function proxyUrl() {
+  return $("proxyUrl").value.trim() || hostedProvider.DEFAULT_PROXY_URL;
 }
 
 async function load() {
@@ -79,6 +84,9 @@ $("save").addEventListener("click", async () => {
   }
   try {
     if (provider === "bridge") await ensureBridgePermission(bridgeUrl());
+    if (provider === "hosted" && proxyUrl() !== hostedProvider.DEFAULT_PROXY_URL) {
+      await ensureHostPermission(proxyUrl(), "Service");
+    }
   } catch (err) {
     setStatus(err.message, "error");
     return;
@@ -86,7 +94,7 @@ $("save").addEventListener("click", async () => {
   await chrome.storage.local.set({
     provider,
     inviteToken,
-    proxyUrl: $("proxyUrl").value.trim() || hostedProvider.DEFAULT_PROXY_URL,
+    proxyUrl: proxyUrl(),
     apiKey,
     bridgeUrl: bridgeUrl(),
     model: $("model").value,
@@ -100,6 +108,7 @@ $("test").addEventListener("click", async () => {
   setStatus("Testing…");
   try {
     if (provider === "hosted") {
+      if (proxyUrl() !== hostedProvider.DEFAULT_PROXY_URL) await ensureHostPermission(proxyUrl(), "Service");
       const me = await hostedProvider.testConnection({
         inviteToken: $("inviteToken").value.trim(),
         proxyUrl: $("proxyUrl").value.trim()

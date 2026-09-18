@@ -6,31 +6,35 @@ compatibility_date = "2026-09-01"
 GEMINI_MODEL = "gemini-3.8-flash"
 # Default crops/day per invite code; a code's own `limit` (invite.sh) overrides it.
 DAILY_LIMIT = "60"
-# Crops/day across ALL codes (~$2.50/day at Flash list price). Soft: counted in KV.
+# Crops/minute per invite code.
+BURST_PER_MIN = "10"
+# Crops/day across ALL codes (~$2.50/day at Flash list price).
 GLOBAL_DAILY_LIMIT = "500"
 # Kill switch: set to "1" and redeploy (or set it in the dashboard) to pause the
 # service; every request then returns 503.
 DISABLED = "0"
 
-# Created by scripts/setup.sh (wrangler kv namespace create TOKENS). Holds invite
-# tokens and the per-day usage counters.
+# Invite tokens (token:<code> -> {name, limit, disabled}). Created by scripts/setup.sh.
 [[kv_namespaces]]
 binding = "TOKENS"
 id = "fa47b3df2fff4271911c73abba01336f"
 
-# Burst limits via Cloudflare's rate-limiting binding. Counters are per
-# Cloudflare location and approximate; they shave bursts, the KV quotas above
-# are the real cap. period must be 10 or 60 seconds.
+# The limits. One QuotaCounter object per invite code plus one service-wide;
+# check-and-increment is atomic per object, so these are hard caps.
+[[durable_objects.bindings]]
+name = "QUOTA"
+class_name = "QuotaCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["QuotaCounter"]
+
+# Per-IP noise reduction ahead of the token lookup. Cloudflare's binding is
+# approximate and per location (measured: 70 calls -> 2 rejections), so nothing
+# relies on it. period must be 10 or 60 seconds.
 [[ratelimits]]
 name = "RL_IP"
 namespace_id = "1001"
   [ratelimits.simple]
   limit = 30
-  period = 60
-
-[[ratelimits]]
-name = "RL_TOKEN"
-namespace_id = "1002"
-  [ratelimits.simple]
-  limit = 10
   period = 60
