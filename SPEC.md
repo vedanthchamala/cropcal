@@ -87,8 +87,8 @@ tests/                     node --test unit tests for pure lib code
 
 Flow: toolbar click (or Alt/Option+Shift+C) → overlay injected → user drags region →
 overlay hides itself → background `captureVisibleTab` → crop at devicePixelRatio →
-Claude API (structured output against the schema above) → one prefilled Google
-Calendar tab per event (max 3) → toast reports outcome.
+provider (hosted service by default) → in-page review card (edit, pick which events)
+→ on confirm, one prefilled Google Calendar tab per chosen event.
 
 API notes (verified against claude-api reference 2026-08-31):
 - Default model `claude-opus-5`, adaptive thinking (default), `output_config.effort`
