@@ -1,6 +1,55 @@
 # Status
 
-_Updated 2026-09-17_
+_Updated 2026-11-11_
+
+## Production plan approved; Phase 0 (foundations) code done, not deployed (2026-11-11)
+- **Plan:** eight phases toward a public Web Store release — 0 foundations,
+  1 Google sign-in + Postgres + per-user quotas, 2 review card, 3 admin usage
+  dashboard, 4 opt-in screenshot collection, 5 store submission, 6 direct
+  Calendar insert, 7 model loop. Decisions (user, 2026-11-11): calendar is
+  **staged** (launch on sign-in + review card + template link; direct insert
+  later because its OAuth scope needs Google verification); backend stays the
+  Worker + Durable Objects with **Neon Postgres + R2** added; dashboard is
+  **admin only**; access is **open Google sign-in, ~20 crops/day**, invite
+  codes retired.
+- **One prompt source.** `proxy/src/gemini.js` (moved from
+  `extension-gemini/lib/providers/gemini.js`) imports the prompt and schema
+  from `extension/lib/schema.js`; the harness's `gemini_request.mjs` and
+  `tests/gemini-request.test.js` point at it. Verified: the request the
+  harness builds is byte-identical before and after (same SHA-1 on a fixed
+  input), so stored eval results stay comparable. `extension-gemini/` (the
+  isolated BYO-Gemini-key build) was imported by nothing afterwards and is
+  **deleted** (user-confirmed); it remains in git history at `3a4b0bf`.
+- **Proxy fixes:** 45 s timeout per Gemini attempt (504, both counters
+  refunded); a billed but unusable answer (blocked, truncated, unparseable)
+  refunds the caller but **not** the service-wide count, so that count bounds
+  spend; a code `limit` of 0 now blocks instead of falling back to 60; Gemini's
+  own error text is no longer passed to clients; no sleep after the last
+  retry; `invite.sh` validates its arguments.
+- **Worker integration tests:** `proxy/test/worker.test.js`, 12 tests in the
+  Workers runtime (`@cloudflare/vitest-plugin` 1.5.1, pinned to a week-old
+  release; 1.8.0 was published the same day and pnpm bypassed its release-age
+  gate for it). Covers auth, the 12-parallel-on-limit-3 race (exactly 3 × 200,
+  9 × 429 — the check previously done by hand), independent codes, refunds on
+  upstream error / timeout / billed failure, and CORS. Gemini is mocked;
+  nothing leaves the machine. `pnpm test:worker`; `pnpm test:all` = 41 + 12.
+- **CI:** `.github/workflows/ci.yml` — JS unit tests, Worker tests, a
+  `wrangler deploy --dry-run` for production and staging, and the ml unittest
+  suite. **Not yet run on GitHub** (nothing is committed or pushed).
+- **Staging:** `[env.staging]` in `proxy/wrangler.toml`
+  (`cropcal-proxy-staging`, own KV/counters/secret, global cap 200);
+  `setup.sh staging` and `invite.sh <name> <limit> staging`. Dry-run lists the
+  right bindings for both environments. **Not created or deployed** — the KV
+  id is still `REPLACE_ME`.
+- **Not done, needs the user:** (1) `./proxy/scripts/setup.sh staging` with a
+  key from a second Gemini project, so evals and staging stop sharing
+  production's 600/day; (2) the full eval suite through staging against the
+  2026-09-16 baseline (194/200 exact, 0/12 false alarms), then the production
+  deploy; (3) a domain, so the proxy host can move off `workers.dev` before
+  the store launch (changing a host permission later disables the extension
+  until each user re-approves); (4) a draft upload to the Web Store for the
+  permanent extension ID and public key (manifest `key`, needed by sign-in);
+  (5) a Neon project for Phase 1's Postgres.
 
 ## Web Store submission package ready (2026-09-17 evening)
 - **v0.1.1:** `host_permissions` narrowed from `https://*.workers.dev/*` to

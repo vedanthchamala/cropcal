@@ -1,9 +1,9 @@
 // CropCal hosted proxy: the extension's /extract contract in front of Gemini.
 // Auth = invite token (KV). Limits = a Durable Object per invite code (atomic
 // crops/day + crops/minute) and one service-wide (crops/day), reserved BEFORE
-// the model call and refunded if it fails. Model request = byte-for-byte what
-// extension-gemini builds. Images are never stored or logged.
-import { buildRequest, parseResponse } from "../../extension-gemini/lib/providers/gemini.js";
+// the model call and refunded if it fails. The prompt and schema are the
+// extension's own (extension/lib/schema.js). Images are never stored or logged.
+import { buildRequest, parseResponse } from "./gemini.js";
 import {
   GLOBAL_NAME, bearer, corsHeaders, geminiErrorMessage, isTokenShaped, rateLimitOk,
   requestTooLarge, sanitizeContext, todayKey, validateBody
@@ -16,11 +16,21 @@ const json = (obj, status, cors) =>
 
 const counter = (env, name) => env.QUOTA.get(env.QUOTA.idFromName(name));
 
+// Per attempt, so a hung upstream cannot hold a reservation open indefinitely.
+// Retries only follow fast 429/503 answers, which keeps the total under the
+// extension's own 90 s abort.
+const ATTEMPT_TIMEOUT_MS = 45_000;
+
 async function callGemini(req, attempts = 3) {
   let res;
   for (let i = 0; i < attempts; i++) {
-    res = await fetch(req.url, { method: "POST", headers: req.headers, body: JSON.stringify(req.body) });
-    if (res.status !== 503 && res.status !== 429) return res;
+    res = await fetch(req.url, {
+      method: "POST",
+      headers: req.headers,
+      body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS)
+    });
+    if ((res.status !== 503 && res.status !== 429) || i === attempts - 1) return res;
     await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
   }
   return res;
@@ -38,7 +48,7 @@ async function authorize(request, env, cors) {
   if (!isTokenShaped(token)) return { error: json({ error: "Invite code not recognized" }, 403, cors) };
   const rec = await env.TOKENS.get(`token:${token}`, "json");
   if (!rec || rec.disabled) return { error: json({ error: "Invite code not recognized" }, 403, cors) };
-  return { token, rec, limit: Number(rec.limit || env.DAILY_LIMIT || 60) };
+  return { token, rec, limit: Number(rec.limit ?? env.DAILY_LIMIT ?? 60) };
 }
 
 // Reserves one crop on the code's counter, then on the service-wide one. Any
@@ -71,9 +81,12 @@ async function reserve(env, a, day, cors) {
       ? { error: json({ error: "The CropCal service has reached its daily limit — try again tomorrow" }, 429, cors) }
       : { error: json({ error: "The CropCal service is busy — try again in a minute" }, 503, cors) };
   }
-  const refund = async () => {
+  // billed = Gemini answered (and charged) but the answer was unusable. The
+  // caller gets the crop back; the service-wide count keeps it, because that
+  // counter exists to bound spend.
+  const refund = async ({ billed = false } = {}) => {
     await mine.release(day).catch(() => {});
-    await all.release(day).catch(() => {});
+    if (!billed) await all.release(day).catch(() => {});
   };
   return { used: r.used, refund };
 }
@@ -117,7 +130,7 @@ export default {
       const slot = await reserve(env, a, day, cors);
       if (slot.error) return slot.error;
 
-      let parsed;
+      let data;
       try {
         const req = buildRequest({ crop: body.image, screen: body.screen }, sanitizeContext(body.context), {
           apiKey: env.GEMINI_API_KEY,
@@ -131,9 +144,18 @@ export default {
           await slot.refund();
           return json({ error }, status, cors);
         }
-        parsed = parseResponse(await res.json());
+        data = await res.json();
       } catch (err) {
         await slot.refund();
+        return err?.name === "TimeoutError"
+          ? json({ error: "The model took too long to answer — try again" }, 504, cors)
+          : json({ error: "Could not reach the model — try again in a minute" }, 502, cors);
+      }
+      let parsed;
+      try {
+        parsed = parseResponse(data);
+      } catch (err) {
+        await slot.refund({ billed: true });
         return json({ error: err.message || "Model call failed" }, 502, cors);
       }
       return json(

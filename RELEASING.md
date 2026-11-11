@@ -7,6 +7,15 @@ pnpm exec wrangler login                 # once, interactive
 ./proxy/scripts/setup.sh                 # creates KV, sets GEMINI_API_KEY secret, deploys
 ./proxy/scripts/invite.sh alice 60       # one code per tester; prints cc_...
 ```
+Staging is a separate Worker with its own KV, counters and secret:
+```
+GEMINI_API_KEY=<eval-project key> ./proxy/scripts/setup.sh staging
+./proxy/scripts/invite.sh me 200 staging
+pnpm exec wrangler deploy --config proxy/wrangler.toml --env staging   # later deploys
+```
+Every proxy change goes to staging first; production follows once the checks
+in section 3 pass there. Roll back with
+`pnpm exec wrangler rollback --config proxy/wrangler.toml`.
 The Gemini key must belong to a project with billing enabled (paid tier: no
 20/day cap, data not used for training). Put the deployed workers.dev URL in
 `extension/lib/providers/hosted.js` (DEFAULT_PROXY_URL) before packaging.
@@ -49,9 +58,12 @@ Each Web Store upload must have a higher `version` than the last.
 
 ## 3. Before every release
 
+- `pnpm test:all` green (CI runs the same on every push).
 - `./scripts/eval.sh --provider bridge --set eval_v0` (and synth sets) after any
   prompt change in `extension/lib/schema.js`; the accuracy suite must stay at 100%
-  or the miss must be adjudicated in STATUS.md.
+  or the miss must be adjudicated in STATUS.md. That file is the only prompt:
+  the hosted proxy (`proxy/src/gemini.js`) and the harness both import it, so a
+  prompt change needs a proxy deploy to reach hosted users.
 - Reload the unpacked extension and click through once: options → Save → Test
   connection; crop an Instagram flyer; crop a chat message with a relative date;
   crop a non-event and confirm the "No event found" toast.

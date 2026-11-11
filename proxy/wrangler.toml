@@ -38,3 +38,33 @@ namespace_id = "1001"
   [ratelimits.simple]
   limit = 30
   period = 60
+
+# ---- Staging: `wrangler deploy --env staging` -> cropcal-proxy-staging, with its
+# own KV namespace, counters and secrets. Bindings and vars are not inherited
+# from the top level, so they are repeated here. Created by
+# `scripts/setup.sh staging`.
+[env.staging.vars]
+GEMINI_MODEL = "gemini-3.8-flash"
+DAILY_LIMIT = "60"
+BURST_PER_MIN = "10"
+GLOBAL_DAILY_LIMIT = "200"
+DISABLED = "0"
+
+[[env.staging.kv_namespaces]]
+binding = "TOKENS"
+id = "REPLACE_ME"
+
+[[env.staging.durable_objects.bindings]]
+name = "QUOTA"
+class_name = "QuotaCounter"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["QuotaCounter"]
+
+[[env.staging.ratelimits]]
+name = "RL_IP"
+namespace_id = "1002"
+  [env.staging.ratelimits.simple]
+  limit = 30
+  period = 60

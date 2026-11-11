@@ -4,9 +4,9 @@
   on a set whose gold was seeded from those same outputs and fully verified).
 - bridge: live call through the local CropCal bridge (claude -p). Use after
   prompt/model changes to regression-test against the frozen gold.
-- gemini: direct Gemini API call using the request that extension-gemini/
-  builds (via evals/gemini_request.mjs), so the isolated Gemini extension and
-  its prompt are what gets scored. Needs GEMINI_API_KEY (ml/.env or env).
+- gemini: direct Gemini API call using the request the hosted proxy builds
+  (proxy/src/gemini.js via evals/gemini_request.mjs), so production's request
+  and prompt are what gets scored. Needs GEMINI_API_KEY (ml/.env or env).
 - ollama: a local open-weights VLM served by Ollama (127.0.0.1:11434), sent the
   main extension's prompt/schema/context verbatim (evals/prompt_export.mjs)
   with Ollama's JSON-schema structured output. This is the Phase 1 "student

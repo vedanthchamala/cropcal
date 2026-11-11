@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# Builds a distributable zip of an extension folder:
-#   ./scripts/package.sh                   -> dist/cropcal-<version>.zip        (extension/, Anthropic)
-#   ./scripts/package.sh extension-gemini  -> dist/cropcal-gemini-<version>.zip (extension-gemini/)
+# Builds a distributable zip of the extension:
+#   ./scripts/package.sh   -> dist/cropcal-<version>.zip
 # Upload it to the Chrome Web Store dashboard, or attach it to a GitHub release
 # for "Load unpacked" installs. Excludes OS junk; validates the manifest first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC="${1:-extension}"
+SRC="extension"
 NAME="cropcal"
-[ "$SRC" = "extension" ] || NAME="cropcal-${SRC#extension-}"
 VERSION=$(node -p "JSON.parse(require('fs').readFileSync('$SRC/manifest.json','utf8')).version")
 node -e "
 const m = JSON.parse(require('fs').readFileSync('$SRC/manifest.json','utf8'));

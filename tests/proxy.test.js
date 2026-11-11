@@ -37,11 +37,14 @@ test("body validation", () => {
   assert.equal(validateBody("nope"), "bad json");
 });
 
-test("gemini errors map to user-facing messages without leaking the key", () => {
+test("gemini errors map to user-facing messages without passing upstream text through", () => {
   assert.equal(geminiErrorMessage(503, null).status, 503);
   assert.match(geminiErrorMessage(429, null).error, /rate-limited/);
   assert.match(geminiErrorMessage(400, { error: { message: "API key not valid" } }).error, /misconfigured/);
-  assert.match(geminiErrorMessage(500, { error: { message: "boom" } }).error, /Model error 500: boom/);
+  const other = geminiErrorMessage(500, { error: { message: "boom" } });
+  assert.equal(other.status, 502);
+  assert.match(other.error, /\(500\)/);
+  assert.doesNotMatch(other.error, /boom/);
 });
 
 test("CORS headers only for browser-extension origins", () => {
