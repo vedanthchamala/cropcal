@@ -1,12 +1,12 @@
 import { cropDataUrl, downscaleDataUrl } from "./lib/crop.js";
 import { buildCalendarUrl, isPastEvent } from "./lib/calendar-url.js";
+import { fromForm, toForm } from "./lib/review.js";
 import * as anthropicProvider from "./lib/providers/anthropic.js";
 import * as bridgeProvider from "./lib/providers/bridge.js";
 import * as hostedProvider from "./lib/providers/hosted.js";
 
 const PROVIDERS = { hosted: hostedProvider, api: anthropicProvider, bridge: bridgeProvider };
 const DEFAULT_PROVIDER = "hosted";
-const MAX_TABS = 3;
 // MV3 service workers are killed after ~30s idle; extension API calls reset the
 // timer, so we ping one while a slow extraction (10-30s+) is in flight.
 const KEEPALIVE_MS = 20_000;
@@ -66,6 +66,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true; // async sendResponse
   }
+  if (msg.type === "cropcal-open") {
+    openInCalendar(msg, sender.tab)
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
 });
 
 async function handleCapture(msg, tab) {
@@ -103,22 +109,38 @@ async function handleCapture(msg, tab) {
     return { ok: false, error: "No event found in the selected region" };
   }
 
-  const opened = events.slice(0, MAX_TABS);
-  for (const event of opened) {
-    const url = buildCalendarUrl(event, {
-      timezone,
-      sourceTitle: tab.title,
-      sourceUrl: tab.url
-    });
-    await chrome.tabs.create({ url, active: opened.length === 1 });
-  }
-
-  const skipped = events.length - opened.length;
+  // The page shows these in the review card. Nothing is opened until the user
+  // confirms, and the worker keeps no state in between (it may be suspended
+  // while they read), so the card sends everything back.
   return {
     ok: true,
-    count: opened.length,
-    skipped,
-    lowConfidence: opened.some((e) => e.confidence === "low"),
-    pastCount: opened.filter((e) => isPastEvent(e)).length
+    timezone,
+    items: events.map((event) => ({ event, form: toForm(event), past: isPastEvent(event) }))
   };
+}
+
+// The user confirmed the card: turn each edited form into the final event,
+// check every one, and only then open the calendar tabs.
+async function openInCalendar(msg, tab) {
+  const items = Array.isArray(msg.items) ? msg.items : [];
+  const errors = [];
+  const urls = [];
+  items.forEach((item, i) => {
+    const built = fromForm(item.form || {}, item.event || {});
+    if (built.error) {
+      errors.push({ index: item.index ?? i, error: built.error });
+      return;
+    }
+    try {
+      urls.push(buildCalendarUrl(built.event, { timezone: msg.timezone, sourceTitle: tab.title, sourceUrl: tab.url }));
+    } catch (err) {
+      errors.push({ index: item.index ?? i, error: err.message });
+    }
+  });
+  if (errors.length) return { ok: false, errors };
+  if (urls.length === 0) return { ok: false, error: "Nothing selected" };
+  for (const url of urls) {
+    await chrome.tabs.create({ url, active: urls.length === 1 });
+  }
+  return { ok: true, count: urls.length };
 }

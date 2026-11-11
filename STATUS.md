@@ -2,6 +2,38 @@
 
 _Updated 2026-11-11_
 
+## Phase 2 (review card) coded and browser-tested; not yet clicked through in the real extension (2026-11-11)
+- **Flow change:** a crop no longer opens calendar tabs by itself. The
+  background returns the events; `content/overlay.js` shows a **review card**
+  (top right, shadow root, constructed stylesheet so page CSS/CSP cannot
+  interfere): editable title, date, start/end time, end date (all-day spans
+  and overnight events), all-day, location, a "Repeats" toggle; the model's
+  `notes`, a low-confidence warning and a past-date warning are shown.
+  Multiple events get a checkbox each — **the 3-event cap is gone**. "Add to
+  Google Calendar" sends the forms back; the background builds every final
+  event and URL first and opens tabs only if all are valid (previously a bad
+  date threw after earlier tabs had opened). Esc or Discard closes the card.
+  The service worker holds no state between the two steps.
+- **`extension/lib/review.js`** (pure): `toForm`, `fromForm`, `diffEvents`.
+  An untouched form returns the model's event exactly — the final event is
+  taken before `buildCalendarUrl` adds its defaults (+1 h end, exclusive
+  all-day end, fallback timezone, attribution), which is what Phase 4 needs
+  for labels. 7 unit tests (55 JS unit tests total).
+- **Browser test (Playwright, real `overlay.js`/`overlay.css` injected into a
+  page with hostile CSS and a key logger, `chrome.runtime` stubbed to run the
+  real `review.js` + `calendar-url.js`):** single low-confidence event —
+  edited title and end → validation error shown for an end before the start,
+  then a correct URL, diff `[title, end]`, page saw none of the typed keys,
+  card closed, toast shown; five events — "Add 5" → untick two → "Add 3",
+  the three accepted events equal the model's output exactly, RRULE and
+  all-day exclusive end correct in the URLs; Esc → card gone, nothing opened.
+  Screenshots checked by eye. No console errors.
+- **Not verified:** the click-through in the installed extension (real
+  `captureVisibleTab`, real tab creation, pages with strict CSP such as
+  Gmail/Instagram). Manual checklist: flyer, relative-date chat, multi-event
+  digest (>3), non-event, edit-then-add, discard.
+- No prompt or schema change, so the eval baseline is unaffected.
+
 ## Phase 1 (accounts) coded and tested locally; blocked on three user-side prerequisites (2026-11-11)
 - **Design change from the approved plan:** sign-in uses a Google **ID
   token** via `chrome.identity.launchWebAuthFlow` (scopes `openid email`),
