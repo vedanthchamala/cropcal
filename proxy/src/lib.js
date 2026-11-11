@@ -110,5 +110,5 @@ export function geminiErrorMessage(status, detail) {
   if (status === 429) return { status: 503, error: "The hosted model is rate-limited right now — try again in a minute" };
   if (status === 503) return { status: 503, error: "The hosted model is busy right now — try again in a minute" };
   if (status === 400 && /API key/i.test(msg)) return { status: 500, error: "Proxy misconfigured (Gemini key)" };
-  return { status: 502, error: `Model error ${status}${msg ? `: ${msg.slice(0, 160)}` : ""}` };
+  return { status: 502, error: `The model returned an error (${status}) — try again` };
 }

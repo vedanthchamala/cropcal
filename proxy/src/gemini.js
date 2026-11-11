@@ -1,5 +1,8 @@
-import { EVENT_SCHEMA, SYSTEM_PROMPT, buildContextText } from "../schema.js";
-import { parseEventsText } from "../parse.js";
+// Gemini request/response for the hosted service. The prompt and event schema
+// come from extension/lib/schema.js — the single source every provider and the
+// eval harness share.
+import { EVENT_SCHEMA, SYSTEM_PROMPT, buildContextText } from "../../extension/lib/schema.js";
+import { parseEventsText } from "../../extension/lib/parse.js";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 export const DEFAULT_MODEL = "gemini-3.8-flash";
@@ -37,8 +40,7 @@ function thinkingConfig(model, thinking) {
   return null;
 }
 
-// Pure: builds the request so the eval harness can send exactly what the
-// extension sends.
+// Pure: the eval harness calls this too, so it scores exactly what production sends.
 export function buildRequest(images, ctx, settings) {
   const model = settings.model || DEFAULT_MODEL;
   const generationConfig = {
@@ -73,6 +75,7 @@ export function buildRequest(images, ctx, settings) {
 }
 
 // Turns a generateContent response into events; throws on blocks/truncation.
+// Every message thrown here is written for the end user.
 export function parseResponse(data) {
   const blocked = data.promptFeedback?.blockReason;
   if (blocked) throw new Error(`Gemini declined to process this image (${blocked})`);
@@ -94,53 +97,4 @@ export function parseResponse(data) {
     model: data.modelVersion,
     finishReason: cand.finishReason
   };
-}
-
-export async function extractEvents(images, ctx, settings) {
-  const { url, headers, body } = buildRequest(images, ctx, settings);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90_000);
-  let res;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-  } catch (err) {
-    throw new Error(
-      err.name === "AbortError" ? "Request timed out after 90s" : `Network error: ${err.message}`
-    );
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    const message = detail?.error?.message || res.statusText;
-    if (res.status === 400 && /API key/i.test(message)) {
-      throw new Error("Invalid Gemini API key — set it in CropCal options");
-    }
-    if (res.status === 429) {
-      throw new Error("Rate limited by Gemini — the free tier allows only a few requests per minute; try again shortly");
-    }
-    throw new Error(`Gemini API error ${res.status}: ${message}`);
-  }
-
-  return parseResponse(await res.json());
-}
-
-// Validates the key (and that the model exists) without generating anything.
-export async function testConnection(settings) {
-  const model = settings.model || DEFAULT_MODEL;
-  const res = await fetch(`${API_BASE}/${model}`, {
-    headers: { "x-goog-api-key": settings.apiKey }
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(detail?.error?.message || `HTTP ${res.status}`);
-  }
-  return true;
 }

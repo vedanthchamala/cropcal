@@ -5,8 +5,8 @@ import {
   toGeminiSchema,
   parseResponse,
   DEFAULT_MODEL
-} from "../extension-gemini/lib/providers/gemini.js";
-import { EVENT_SCHEMA } from "../extension-gemini/lib/schema.js";
+} from "../proxy/src/gemini.js";
+import { EVENT_SCHEMA } from "../extension/lib/schema.js";
 
 const images = { crop: "Y3JvcA==", screen: "c2NyZWVu" };
 const ctx = {

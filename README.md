@@ -41,17 +41,6 @@ Claude Opus 5 (the most accurate option) or a third of that on Sonnet 5.
 Limits: only the visible part of the page is captured (scroll first).
 `chrome://` pages, the Chrome Web Store, and PDF viewers cannot be captured.
 
-## Gemini build (experimental)
-
-`extension-gemini/` is an isolated copy of the extension that uses the Gemini
-API (`gemini-3.8-flash` by default) instead of Anthropic, so it can be tuned
-without touching the main build. A Gemini key comes from
-https://aistudio.google.com/apikey with a plain Google account and has a free
-tier. Note the free tier's terms let Google use prompts to improve its
-products; a key on a billed project is not used that way. Build it with
-`./scripts/package.sh extension-gemini`; load it the same way. Accuracy
-numbers for this build versus the Anthropic build are tracked in STATUS.md.
-
 ## Privacy
 
 See [PRIVACY.md](PRIVACY.md). Short version: no server, no analytics; the
@@ -62,21 +51,25 @@ live only in your browser.
 
 `proxy/` is a Cloudflare Worker that speaks the same `/extract` contract as
 the bridge: it checks an invite code, enforces a per-code daily limit, sends
-the crop to Gemini with the request `extension-gemini/` builds, and returns
-the events. It stores nothing but counters. Limits are hard caps held in a
+the crop to Gemini with the request `proxy/src/gemini.js` builds (prompt and
+schema from `extension/lib/schema.js`), and returns the events. It stores nothing but counters. Limits are hard caps held in a
 Durable Object per invite code (crops/day and crops/minute) plus one for the
 whole service (`GLOBAL_DAILY_LIMIT` in `proxy/wrangler.toml`); a crop is
-reserved before the model call and refunded if it fails. `DISABLED = "1"`
-pauses the service. Deploy once with
+reserved before the model call and refunded if it fails (a billed but
+unusable answer is refunded to the caller only, so the service-wide count
+still bounds spend). `DISABLED = "1"` pauses the service. Deploy once with
 `pnpm exec wrangler login` then `./proxy/scripts/setup.sh`; mint codes with
-`./proxy/scripts/invite.sh <name> [crops_per_day]`. Local run:
-`cd proxy && ../node_modules/.bin/wrangler dev --local`.
+`./proxy/scripts/invite.sh <name> [crops_per_day]`. A separate staging
+Worker (`cropcal-proxy-staging`) is created with `./proxy/scripts/setup.sh
+staging`. Local run: `cd proxy && ../node_modules/.bin/wrangler dev --local`.
 
 ## Development
 
 ```
-pnpm install         # nothing to install, but sets up the lockfile
+pnpm install
 pnpm test            # unit tests for the pure lib code (node --test)
+pnpm test:worker     # Worker routes + quota Durable Object, in the Workers runtime (vitest)
+pnpm test:all        # both; CI (.github/workflows/ci.yml) runs these plus the ml tests
 ./scripts/bridge.sh  # optional: local Claude Code bridge instead of an API key
 ./scripts/package.sh # builds dist/cropcal-<version>.zip
 ```

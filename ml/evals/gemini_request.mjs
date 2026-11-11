@@ -1,7 +1,7 @@
-// Bridges the eval harness (Python) to the Gemini extension's request builder
-// so the harness sends byte-for-byte what extension-gemini sends.
+// Bridges the eval harness (Python) to the hosted proxy's request builder so
+// the harness sends byte-for-byte what production sends to Gemini.
 // stdin: {"images": {...}, "ctx": {...}, "settings": {...}}  stdout: {url, headers, body}
-import { buildRequest } from "../../extension-gemini/lib/providers/gemini.js";
+import { buildRequest } from "../../proxy/src/gemini.js";
 
 let input = "";
 process.stdin.setEncoding("utf8");

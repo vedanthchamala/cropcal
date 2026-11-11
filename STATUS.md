@@ -1,6 +1,79 @@
 # Status
 
-_Updated 2026-09-17_
+_Updated 2026-11-11_
+
+## Production plan approved; Phase 0 (foundations) code done, not deployed (2026-11-11)
+- **Plan:** eight phases toward a public Web Store release — 0 foundations,
+  1 Google sign-in + Postgres + per-user quotas, 2 review card, 3 admin usage
+  dashboard, 4 opt-in screenshot collection, 5 store submission, 6 direct
+  Calendar insert, 7 model loop. Decisions (user, 2026-11-11): calendar is
+  **staged** (launch on sign-in + review card + template link; direct insert
+  later because its OAuth scope needs Google verification); backend stays the
+  Worker + Durable Objects with **Neon Postgres + R2** added; dashboard is
+  **admin only**; access is **open Google sign-in, ~20 crops/day**, invite
+  codes retired.
+- **One prompt source.** `proxy/src/gemini.js` (moved from
+  `extension-gemini/lib/providers/gemini.js`) imports the prompt and schema
+  from `extension/lib/schema.js`; the harness's `gemini_request.mjs` and
+  `tests/gemini-request.test.js` point at it. Verified: the request the
+  harness builds is byte-identical before and after (same SHA-1 on a fixed
+  input), so stored eval results stay comparable. `extension-gemini/` (the
+  isolated BYO-Gemini-key build) was imported by nothing afterwards and is
+  **deleted** (user-confirmed); it remains in git history at `3a4b0bf`.
+- **Proxy fixes:** 45 s timeout per Gemini attempt (504, both counters
+  refunded); a billed but unusable answer (blocked, truncated, unparseable)
+  refunds the caller but **not** the service-wide count, so that count bounds
+  spend; a code `limit` of 0 now blocks instead of falling back to 60; Gemini's
+  own error text is no longer passed to clients; no sleep after the last
+  retry; `invite.sh` validates its arguments.
+- **Worker integration tests:** `proxy/test/worker.test.js`, 12 tests in the
+  Workers runtime (`@cloudflare/vitest-plugin` 1.5.1, pinned to a week-old
+  release; 1.8.0 was published the same day and pnpm bypassed its release-age
+  gate for it). Covers auth, the 12-parallel-on-limit-3 race (exactly 3 × 200,
+  9 × 429 — the check previously done by hand), independent codes, refunds on
+  upstream error / timeout / billed failure, and CORS. Gemini is mocked;
+  nothing leaves the machine. `pnpm test:worker`; `pnpm test:all` = 41 + 12.
+- **CI:** `.github/workflows/ci.yml` — JS unit tests, Worker tests, a
+  `wrangler deploy --dry-run` for production and staging, and the ml unittest
+  suite. **Not yet run on GitHub** (nothing is committed or pushed).
+- **Staging: live and verified (2026-11-11).**
+  `https://cropcal-proxy-staging.vedhuchamala.workers.dev`
+  (`cropcal-proxy-staging`, own KV `84395136…`, counters and secret, global
+  cap 200), created with `./proxy/scripts/setup.sh staging` using a key from
+  a **second Gemini project** (number `268665856076`). `ml/.env` now holds
+  that key as `GEMINI_API_KEY` (evals no longer draw on production's
+  600/day), the production key as `GEMINI_API_KEY_PROD`, and a staging invite
+  code as `STAGING_CODE`. Checked live: `/health` 200, bad code 403, `/me`
+  0/200. `setup.sh`/`invite.sh` now call `../node_modules/.bin/wrangler`
+  (`pnpm exec` fails from `proxy/` on pnpm 11) and print wrangler's output on
+  failure instead of exiting silently.
+- **Regression vs the 2026-09-16 baseline: identical, 194/200 exact, no
+  false positives.** eval_v0 through the staging proxy `/extract`: 18/18
+  exact (12 cases, 5–20 s each). The other sets through the harness
+  (`--provider gemini`, same request builder): eval_v1 24/30 exact, synth_v0
+  9/9, synth_v1 96/96, synth_v2 47/47; results in
+  `ml/results/gemini-gemini-3.8-flash-20261111T1{25154,25555,25707,30458}.json`.
+  eval_v1 moved case by case but not in total: `07-ig-sundevil-gbm` now
+  returns `America/Phoenix` (was a miss); `10-ig-aws-jam-apps-due` now spells
+  the org out ("Artificial Intelligence Society AWS Jam Applications Due")
+  and falls under the title threshold (was exact); the `ambiguous` ECAC case
+  additionally emits location "ECAC". Run-to-run model variation, not a code
+  effect — the request is byte-identical. ~150 requests on the new key with
+  no 429, so the new project is not on the 20/day free tier. Latency is
+  higher than in September (set means 6.4–10.8 s vs 4.3 s overall then).
+- **Production deployed 2026-11-11** (version `4c575221`). Live checks with
+  throwaway codes (`zz-deploy-check`, deleted afterwards and confirmed 403):
+  `/health` 200, bad code 403, web origin gets no ACAO, `/me` 0/2 → 1/2 after
+  one crop. The eval_v0 Bloomberg crop through production `/extract`: the
+  first run scored below 8/8 (the failing field was not captured), two
+  reruns were 8/8, as was staging on the same crop — treated as model
+  variation, not verified further.
+- **Still needs the user before Phase 1:** (1) a domain, so the proxy host
+  can move off `workers.dev` before the store launch (changing a host
+  permission later disables the extension until each user re-approves);
+  (2) a draft upload to the Web Store for the permanent extension ID and
+  public key (manifest `key`, needed by sign-in); (3) a Neon project for
+  Postgres.
 
 ## Web Store submission package ready (2026-09-17 evening)
 - **v0.1.1:** `host_permissions` narrowed from `https://*.workers.dev/*` to

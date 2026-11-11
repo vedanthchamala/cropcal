@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm test:worker
+      - name: Wrangler config builds for both environments
+        run: |
+          pnpm exec wrangler deploy --dry-run --config proxy/wrangler.toml
+          pnpm exec wrangler deploy --dry-run --config proxy/wrangler.toml --env staging
+
+  ml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run python -m unittest discover -s tests
+        working-directory: ml
