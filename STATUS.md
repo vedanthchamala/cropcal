@@ -61,8 +61,13 @@ _Updated 2026-11-11_
   effect — the request is byte-identical. ~150 requests on the new key with
   no 429, so the new project is not on the 20/day free tier. Latency is
   higher than in September (set means 6.4–10.8 s vs 4.3 s overall then).
-- **Not done:** production deploy of the Phase 0 proxy (awaiting the user's
-  go-ahead); branch not pushed, so CI has not run on GitHub.
+- **Production deployed 2026-11-11** (version `4c575221`). Live checks with
+  throwaway codes (`zz-deploy-check`, deleted afterwards and confirmed 403):
+  `/health` 200, bad code 403, web origin gets no ACAO, `/me` 0/2 → 1/2 after
+  one crop. The eval_v0 Bloomberg crop through production `/extract`: the
+  first run scored below 8/8 (the failing field was not captured), two
+  reruns were 8/8, as was staging on the same crop — treated as model
+  variation, not verified further.
 - **Still needs the user before Phase 1:** (1) a domain, so the proxy host
   can move off `workers.dev` before the store launch (changing a host
   permission later disables the extension until each user re-approves);
