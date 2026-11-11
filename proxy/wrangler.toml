@@ -52,7 +52,7 @@ DISABLED = "0"
 
 [[env.staging.kv_namespaces]]
 binding = "TOKENS"
-id = "REPLACE_ME"
+id = "84395136826144e7b95246f7efd509e2"
 
 [[env.staging.durable_objects.bindings]]
 name = "QUOTA"

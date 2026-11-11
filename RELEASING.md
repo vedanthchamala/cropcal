@@ -9,7 +9,7 @@ pnpm exec wrangler login                 # once, interactive
 ```
 Staging is a separate Worker with its own KV, counters and secret:
 ```
-GEMINI_API_KEY=<eval-project key> ./proxy/scripts/setup.sh staging
+./proxy/scripts/setup.sh staging                       # reads the eval-project key from ml/.env
 ./proxy/scripts/invite.sh me 200 staging
 pnpm exec wrangler deploy --config proxy/wrangler.toml --env staging   # later deploys
 ```

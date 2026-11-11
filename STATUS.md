@@ -36,20 +36,39 @@ _Updated 2026-11-11_
 - **CI:** `.github/workflows/ci.yml` — JS unit tests, Worker tests, a
   `wrangler deploy --dry-run` for production and staging, and the ml unittest
   suite. **Not yet run on GitHub** (nothing is committed or pushed).
-- **Staging:** `[env.staging]` in `proxy/wrangler.toml`
-  (`cropcal-proxy-staging`, own KV/counters/secret, global cap 200);
-  `setup.sh staging` and `invite.sh <name> <limit> staging`. Dry-run lists the
-  right bindings for both environments. **Not created or deployed** — the KV
-  id is still `REPLACE_ME`.
-- **Not done, needs the user:** (1) `./proxy/scripts/setup.sh staging` with a
-  key from a second Gemini project, so evals and staging stop sharing
-  production's 600/day; (2) the full eval suite through staging against the
-  2026-09-16 baseline (194/200 exact, 0/12 false alarms), then the production
-  deploy; (3) a domain, so the proxy host can move off `workers.dev` before
-  the store launch (changing a host permission later disables the extension
-  until each user re-approves); (4) a draft upload to the Web Store for the
-  permanent extension ID and public key (manifest `key`, needed by sign-in);
-  (5) a Neon project for Phase 1's Postgres.
+- **Staging: live and verified (2026-11-11).**
+  `https://cropcal-proxy-staging.vedhuchamala.workers.dev`
+  (`cropcal-proxy-staging`, own KV `84395136…`, counters and secret, global
+  cap 200), created with `./proxy/scripts/setup.sh staging` using a key from
+  a **second Gemini project** (number `268665856076`). `ml/.env` now holds
+  that key as `GEMINI_API_KEY` (evals no longer draw on production's
+  600/day), the production key as `GEMINI_API_KEY_PROD`, and a staging invite
+  code as `STAGING_CODE`. Checked live: `/health` 200, bad code 403, `/me`
+  0/200. `setup.sh`/`invite.sh` now call `../node_modules/.bin/wrangler`
+  (`pnpm exec` fails from `proxy/` on pnpm 11) and print wrangler's output on
+  failure instead of exiting silently.
+- **Regression vs the 2026-09-16 baseline: identical, 194/200 exact, no
+  false positives.** eval_v0 through the staging proxy `/extract`: 18/18
+  exact (12 cases, 5–20 s each). The other sets through the harness
+  (`--provider gemini`, same request builder): eval_v1 24/30 exact, synth_v0
+  9/9, synth_v1 96/96, synth_v2 47/47; results in
+  `ml/results/gemini-gemini-3.8-flash-20261111T1{25154,25555,25707,30458}.json`.
+  eval_v1 moved case by case but not in total: `07-ig-sundevil-gbm` now
+  returns `America/Phoenix` (was a miss); `10-ig-aws-jam-apps-due` now spells
+  the org out ("Artificial Intelligence Society AWS Jam Applications Due")
+  and falls under the title threshold (was exact); the `ambiguous` ECAC case
+  additionally emits location "ECAC". Run-to-run model variation, not a code
+  effect — the request is byte-identical. ~150 requests on the new key with
+  no 429, so the new project is not on the 20/day free tier. Latency is
+  higher than in September (set means 6.4–10.8 s vs 4.3 s overall then).
+- **Not done:** production deploy of the Phase 0 proxy (awaiting the user's
+  go-ahead); branch not pushed, so CI has not run on GitHub.
+- **Still needs the user before Phase 1:** (1) a domain, so the proxy host
+  can move off `workers.dev` before the store launch (changing a host
+  permission later disables the extension until each user re-approves);
+  (2) a draft upload to the Web Store for the permanent extension ID and
+  public key (manifest `key`, needed by sign-in); (3) a Neon project for
+  Postgres.
 
 ## Web Store submission package ready (2026-09-17 evening)
 - **v0.1.1:** `host_permissions` narrowed from `https://*.workers.dev/*` to

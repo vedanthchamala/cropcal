@@ -7,7 +7,7 @@
 # export the eval project's key so staging traffic never draws on production's quota.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-W="pnpm exec wrangler"
+W="../node_modules/.bin/wrangler"
 TARGET="${1:-production}"
 case "$TARGET" in
   production) ENV_FLAG="" ;;
@@ -17,8 +17,9 @@ esac
 
 # Production's id is already filled in, so the only placeholder left is staging's.
 if [ "$TARGET" = "staging" ] && grep -q 'id = "REPLACE_ME"' wrangler.toml; then
-  ID=$($W kv namespace create TOKENS $ENV_FLAG 2>&1 | grep -oE 'id = "[a-f0-9]+"' | head -1 | grep -oE '[a-f0-9]{32}')
-  [ -n "$ID" ] || { echo "could not create KV namespace"; exit 1; }
+  OUT=$($W kv namespace create TOKENS $ENV_FLAG 2>&1) || { echo "$OUT"; exit 1; }
+  ID=$(printf '%s' "$OUT" | grep -oE '"?id"?[ =:]+"[a-f0-9]{32}"' | head -1 | grep -oE '[a-f0-9]{32}' || true)
+  [ -n "$ID" ] || { echo "could not read the KV namespace id from:"; echo "$OUT"; exit 1; }
   sed -i '' "s/id = \"REPLACE_ME\"/id = \"$ID\"/" wrangler.toml
   echo "KV namespace TOKENS ($TARGET) = $ID"
 fi
