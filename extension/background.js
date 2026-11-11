@@ -14,6 +14,8 @@ const KEEPALIVE_MS = 20_000;
 async function getSettings() {
   const stored = await chrome.storage.local.get([
     "provider",
+    "sessionToken",
+    "email",
     "inviteToken",
     "proxyUrl",
     "apiKey",
@@ -36,7 +38,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 chrome.action.onClicked.addListener(async (tab) => {
   const settings = await getSettings();
   const needsSetup =
-    (settings.provider === "hosted" && !settings.inviteToken) ||
+    (settings.provider === "hosted" && !hostedProvider.credential(settings)) ||
     (settings.provider === "api" && !settings.apiKey);
   if (needsSetup) {
     chrome.runtime.openOptionsPage();

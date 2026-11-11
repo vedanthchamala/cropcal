@@ -4,12 +4,17 @@ compatibility_date = "2026-09-01"
 
 [vars]
 GEMINI_MODEL = "gemini-3.8-flash"
-# Default crops/day per invite code; a code's own `limit` (invite.sh) overrides it.
+# Crops/day per signed-in user; users.daily_limit in Postgres overrides it per user.
+USER_DAILY_LIMIT = "20"
+# Default crops/day per legacy invite code; a code's own `limit` (invite.sh) overrides it.
 DAILY_LIMIT = "60"
-# Crops/minute per invite code.
+# Crops/minute per caller.
 BURST_PER_MIN = "10"
-# Crops/day across ALL codes (~$2.50/day at Flash list price).
+# Crops/day across ALL callers (~$2.50/day at Flash list price).
 GLOBAL_DAILY_LIMIT = "500"
+# Sign-in needs three more things, added once they exist (see RELEASING.md):
+#   GOOGLE_CLIENT_ID (var), SESSION_SECRET (secret), and a [[hyperdrive]] binding
+#   named HYPERDRIVE. Until then /auth/google answers 503 and nothing is logged.
 # Kill switch: set to "1" and redeploy (or set it in the dashboard) to pause the
 # service; every request then returns 503.
 DISABLED = "0"
@@ -45,6 +50,7 @@ namespace_id = "1001"
 # `scripts/setup.sh staging`.
 [env.staging.vars]
 GEMINI_MODEL = "gemini-3.8-flash"
+USER_DAILY_LIMIT = "20"
 DAILY_LIMIT = "60"
 BURST_PER_MIN = "10"
 GLOBAL_DAILY_LIMIT = "200"

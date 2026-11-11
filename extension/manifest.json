@@ -12,13 +12,14 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "identity"
   ],
   "host_permissions": [
-    "https://cropcal-proxy.vedhuchamala.workers.dev/*",
-    "https://api.anthropic.com/*"
+    "https://cropcal-proxy.vedhuchamala.workers.dev/*"
   ],
   "optional_host_permissions": [
+    "https://api.anthropic.com/*",
     "https://*.workers.dev/*",
     "http://127.0.0.1:48765/*",
     "http://localhost:48765/*"

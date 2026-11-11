@@ -35,34 +35,48 @@
       background: #e5e5ea;
     }
     button.primary { background: #4f8ef7; color: #fff; }
+    button:disabled { opacity: 0.45; cursor: default; }
     #status { margin-top: 16px; font-size: 13px; min-height: 20px; }
     #status.ok { color: #1a7f37; }
     #status.error { color: #b3261e; }
-    ol { padding-left: 20px; }
-    li { margin: 4px 0; }
+    #account { margin-top: 20px; padding: 16px; border: 1px solid #d2d2d7; border-radius: 10px; }
+    #account p { margin: 0 0 12px; }
+    details { margin-top: 28px; }
+    summary { cursor: pointer; color: #6e6e73; font-weight: 600; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <h1><img src="../icons/icon48.png" alt="" />CropCal</h1>
   <p>Click the CropCal toolbar button (or press <kbd>Alt/Option+Shift+C</kbd>), drag a box around an event on any page, and a prefilled Google Calendar event opens for you to review and save.</p>
 
-  <h2>Setup</h2>
-  <ol>
-    <li>Paste the invite code you were given below.</li>
-    <li>Click <b>Save</b>, then <b>Test connection</b>. That's it.</li>
-  </ol>
+  <div id="account">
+    <div id="signedOut">
+      <p>Sign in to start cropping. CropCal only receives your email address — it cannot see your Google Calendar, mail or files.</p>
+      <button id="signIn" class="primary">Sign in with Google</button>
+    </div>
+    <div id="signedIn" hidden>
+      <p>Signed in as <b id="email"></b><br /><span id="usage" class="hint"></span></p>
+      <button id="signOut">Sign out</button>
+    </div>
+    <div class="hint">Your crops are sent to the CropCal service, which forwards them to Google's Gemini API on a paid plan (not used for training). The service keeps your email and usage counts, never the images.</div>
+  </div>
+  <div id="accountStatus" class="hint"></div>
+
+  <details id="advanced">
+  <summary>Advanced</summary>
 
   <label for="provider">Provider</label>
   <select id="provider">
-    <option value="hosted" selected>CropCal service (invite code, recommended)</option>
+    <option value="hosted" selected>CropCal service (recommended)</option>
     <option value="api">Your own Anthropic API key</option>
     <option value="bridge">Local Claude Code bridge (developers only)</option>
   </select>
 
   <div id="hostedSection">
-    <label for="inviteToken">Invite code</label>
+    <label for="inviteToken">Invite code (early testers)</label>
     <input type="password" id="inviteToken" placeholder="cc_..." autocomplete="off" />
-    <div class="hint">Each code has a daily crop limit. Your crops are sent to the CropCal service, which forwards them to Google's Gemini API on a paid plan (not used for training) and keeps nothing.</div>
+    <div class="hint">Only used when you are not signed in.</div>
     <label for="proxyUrl">Service URL</label>
     <input type="text" id="proxyUrl" placeholder="https://cropcal-proxy.….workers.dev" />
     <div class="hint">Leave as is unless you were told otherwise.</div>
@@ -71,7 +85,7 @@
   <div id="apiSection">
     <label for="apiKey">Anthropic API key</label>
     <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
-    <div class="hint">Stored only on this device (chrome.storage.local), sent only to api.anthropic.com. Each crop costs roughly $0.05–0.30 depending on the model.</div>
+    <div class="hint">Stored only on this device (chrome.storage.local), sent only to api.anthropic.com. Each crop costs roughly $0.05–0.30 depending on the model. Saving asks for permission to reach api.anthropic.com.</div>
 
     <label for="model">Model</label>
     <select id="model">
@@ -101,6 +115,7 @@
     <button id="test">Test connection</button>
   </div>
   <div id="status"></div>
+  </details>
 
   <script type="module" src="options.js"></script>
 </body>
