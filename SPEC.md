@@ -25,6 +25,23 @@ self-fine-tuned ~2B vision-language model becomes the private/local backend late
   (title / start / end / location / recurrence), latency, cost. Datetime resolution
   is scored separately — it's where Gmail/Apple parsers fail and where we win.
 
+## Production decisions (agreed 2026-11-11, supersede the v0 notes above where they differ)
+
+- **Default backend is the hosted service** (`proxy/`, Cloudflare Worker →
+  Gemini Flash). BYO Anthropic key and the bridge are advanced options.
+- **Accounts:** Google sign-in for identity only (ID token, scopes
+  `openid email`); the service issues its own session token. Open sign-in,
+  ~20 crops/day per user, service-wide cap and kill switch.
+- **Storage:** Postgres (Neon via Hyperdrive) holds accounts and usage
+  metadata; quotas stay in Durable Objects; opt-in screenshots (later phase)
+  go to R2. Nothing about a crop's content is stored without opt-in.
+- **Calendar, staged:** launch on an in-extension review card that opens the
+  template link; direct Calendar API insert is a later opt-in, after Google
+  OAuth verification. Calendar API data is never used for training.
+- **Phases:** 0 foundations → 1 accounts → 2 review card → 3 admin dashboard
+  → 4 opt-in collection → 5 Web Store → 6 direct insert → 7 model loop.
+  Current state is in STATUS.md.
+
 ## Event JSON schema (v1)
 
 The model returns `{ "events": [Event, ...] }`; empty array = no event found.

@@ -68,7 +68,8 @@ staging`. Local run: `cd proxy && ../node_modules/.bin/wrangler dev --local`.
 ```
 pnpm install
 pnpm test            # unit tests for the pure lib code (node --test)
-pnpm test:worker     # Worker routes + quota Durable Object, in the Workers runtime (vitest)
+pnpm db:test:up      # local Postgres in Docker (port 54329) for the Worker tests
+pnpm test:worker     # Worker routes, sign-in, quotas, usage logging, in the Workers runtime (vitest)
 pnpm test:all        # both; CI (.github/workflows/ci.yml) runs these plus the ml tests
 ./scripts/bridge.sh  # optional: local Claude Code bridge instead of an API key
 ./scripts/package.sh # builds dist/cropcal-<version>.zip

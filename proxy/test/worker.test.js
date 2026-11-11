@@ -59,7 +59,8 @@ it("health needs no code", async () => {
 it("rejects a missing or unknown code before the model is called", async () => {
   expect((await extract({ code: null })).status).toBe(401);
   expect((await extract({ code: "cc_ZZZZZZZZZZZZZZZZZZZZZZ" })).status).toBe(403);
-  expect((await extract({ code: "not-a-code" })).status).toBe(403);
+  expect((await extract({ code: "cc_short" })).status).toBe(403);
+  expect((await extract({ code: "not-a-code" })).status).toBe(401);
   expect(gemini).not.toHaveBeenCalled();
 });
 

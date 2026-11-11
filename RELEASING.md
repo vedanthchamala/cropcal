@@ -20,6 +20,26 @@ The Gemini key must belong to a project with billing enabled (paid tier: no
 20/day cap, data not used for training). Put the deployed workers.dev URL in
 `extension/lib/providers/hosted.js` (DEFAULT_PROXY_URL) before packaging.
 
+### Sign-in and Postgres (once per environment)
+
+```
+# 1. Neon: create a role for Hyperdrive and copy the DIRECT (non-pooled) connection string.
+DATABASE_URL='postgres://…' pnpm db:migrate              # applies proxy/migrations/*.sql
+cd proxy
+../node_modules/.bin/wrangler hyperdrive create cropcal-db --connection-string='postgres://…'
+#    -> add to wrangler.toml (and again under [env.staging] with staging's own database):
+#       [[hyperdrive]]
+#       binding = "HYPERDRIVE"
+#       id = "<id printed above>"
+# 2. Session signing key (any long random string; a new one signs everyone out):
+openssl rand -base64 48 | ../node_modules/.bin/wrangler secret put SESSION_SECRET
+# 3. Google Cloud console -> OAuth client, type "Web application", authorised redirect URI
+#    https://<extension id>.chromiumapp.org/ . Put the client id in wrangler.toml as
+#    GOOGLE_CLIENT_ID (a var, not a secret) and in extension/lib/auth-url.js.
+```
+Migrations are additive only and run before the deploy that needs them.
+Tests need a local Postgres: `pnpm db:test:up` (Docker, port 54329).
+
 Limits live in `proxy/wrangler.toml`: `DAILY_LIMIT` (default per code),
 `BURST_PER_MIN` (per code), `GLOBAL_DAILY_LIMIT` (all codes) — enforced
 atomically by the `QuotaCounter` Durable Object — plus the `DISABLED` kill

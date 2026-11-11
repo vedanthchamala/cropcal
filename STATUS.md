@@ -2,6 +2,68 @@
 
 _Updated 2026-11-11_
 
+## Phase 1 (accounts) coded and tested locally; blocked on three user-side prerequisites (2026-11-11)
+- **Design change from the approved plan:** sign-in uses a Google **ID
+  token** via `chrome.identity.launchWebAuthFlow` (scopes `openid email`),
+  not `getAuthToken`. Reason: `getAuthToken` yields only an access token and
+  Google documents no production way to verify one on a backend (its
+  `tokeninfo` endpoint is "not suitable for use in production code"); ID
+  tokens are verified offline against Google's published keys. Side effects:
+  works on Edge/Brave too; sign-in is a small popup window; no `oauth2`
+  manifest block, the OAuth client is type "Web application" with redirect
+  `https://<extension id>.chromiumapp.org/`.
+- **Server (`proxy/src/`):** `google.js` (RS256 + `iss`/`aud`/`exp`/
+  `email_verified`, key cache with one refetch on an unknown `kid`),
+  `session.js` (HMAC-SHA256 session tokens `cs1.…`, 30 days), `db.js` (`pg`
+  through a Hyperdrive binding), `POST /auth/google`. `/extract` and `/me`
+  accept a session token or, for one more release, a legacy `cc_` invite
+  code. Signed-in users are counted on a Durable Object named `user:<id>`
+  (`USER_DAILY_LIMIT` = 20, `users.daily_limit` overrides, `users.disabled`
+  blocks). Every attempt writes one `usage_events` row after the response
+  (status, model, latency, token counts, event count — no image, title or
+  URL). If Postgres is down, signed-in users keep working on default limits
+  and the Durable Object still caps them. Without the bindings the Worker
+  behaves as before: `/auth/google` → 503, nothing logged.
+- **Schema:** `proxy/migrations/0001_accounts.sql` (`users`,
+  `usage_events`); `pnpm db:migrate` applies migrations once each in a
+  transaction (`schema_migrations`).
+- **Extension:** `lib/auth-url.js` (pure) + `lib/auth.js`; options page leads
+  with "Sign in with Google" / "Signed in as … n of 20 used today", and
+  provider, invite code, service URL, BYO Anthropic key and bridge sit under
+  **Advanced**; `identity` permission added; `api.anthropic.com` moved to
+  `optional_host_permissions` (requested on Save/Test — anyone already using
+  a BYO key must re-save once). An expired session renews silently once
+  (`prompt=none`) before the user is asked to sign in again.
+  `GOOGLE_CLIENT_ID` in `auth-url.js` is **empty**, so the button is disabled
+  and says so; invite codes keep working.
+- **Tests: 48 unit (`pnpm test`) + 20 Worker (`pnpm test:worker`), all
+  passing.** Worker tests run against a real Postgres (`pnpm db:test:up`,
+  Docker, port 54329; CI uses a service container) with Google's keys and
+  Gemini mocked: sign-in creates one user and updates the email; a token for
+  another app / unverified email / garbage is refused; forged, wrong-secret
+  and deleted-user sessions → 401 before the model; **12 parallel extracts
+  on a limit-3 user → exactly 3 × 200**, a second user unaffected; per-user
+  limit and disabled flag; usage rows hold metadata only; legacy codes
+  logged as `invite`; database outage → still capped at the limit.
+  Options page rendered signed-out / signed-in / Advanced with `chrome.*`
+  stubbed and checked by eye, no console errors.
+- **Staging runs this code** (version `3912f18d`): `/health` 200, staging
+  invite code `/me` and a real eval_v0 crop 8/8, `/auth/google` → 503 (no
+  database yet), a made-up session → 401. **Production still runs Phase 0.**
+- **Not verified — cannot be until the prerequisites exist:** a real Google
+  sign-in in Chrome, the live Neon/Hyperdrive path, and the manual
+  click-through (fresh profile → sign in → crop → 1/20; second account
+  independent; sign out → next crop asks to sign in).
+- **Needs the user:** (1) Web Store draft upload → extension ID + public key
+  (manifest `key`, redirect URI); (2) Neon project + connection string;
+  (3) Google OAuth client (after 1); (4) a domain before the store launch.
+  Steps are in RELEASING.md → "Sign-in and Postgres".
+- **Do not release this extension build yet:** PRIVACY.md and the store
+  listing still describe the no-account service (rewrite is Phase 5).
+- `scripts/package.sh` overwrote `dist/cropcal-0.1.1.zip` with this
+  unreleased code during a check; the zip was rebuilt from the release commit
+  `3a4b0bf` (same contents as v0.1.1, new timestamp).
+
 ## Production plan approved; Phase 0 (foundations) code done, not deployed (2026-11-11)
 - **Plan:** eight phases toward a public Web Store release — 0 foundations,
   1 Google sign-in + Postgres + per-user quotas, 2 review card, 3 admin usage
